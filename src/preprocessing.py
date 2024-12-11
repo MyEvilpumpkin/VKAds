@@ -6,15 +6,42 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 
-def read_data(dir, name):
-    return pd.read_csv(os.path.join(dir, f'{name}.tsv'), sep='\t')
+def read_data(data_dir, name):
+    """
+    Чтение данных
+    """
+
+    return pd.read_csv(os.path.join(data_dir, f'{name}.tsv'), sep='\t')
 
 
-def write_data(dir, name, data):
-    data.to_csv(os.path.join(dir, f'{name}.tsv'), sep='\t')
+def write_data(data_dir, name, data):
+    """
+    Запись данных
+    """
+
+    data.to_csv(os.path.join(data_dir, f'{name}.tsv'), sep='\t')
+
+
+def features_targets_split(data):
+    """
+    Разделение данных на фичи и таргеты
+    """
+
+    target_columns = ['at_least_one', 'at_least_two', 'at_least_three']
+
+    features = data.drop(columns=target_columns)
+    targets = data[target_columns]
+
+    return features, targets
 
 
 def process_history(history):
+    """
+    Обработка таблицы с историей
+
+    !!! Подробная информация о предобработке находится в research/solution.ipynb
+    """
+
     user_cpms = {}
     publisher_users = {}
 
@@ -35,15 +62,27 @@ def process_history(history):
 
 
 def peak_hours(hour_start, hour_end):
+    """
+    Вычисление пиковых часов
+
+    !!! Подробная информация о предобработке находится в research/solution.ipynb
+    """
+
     peak_hours_count = 0
     for i in range(hour_start, hour_end + 1):
         hour_norm = i % 24
-        if hour_norm >= 8 and hour_norm <= 22:
+        if 8 <= hour_norm <= 22:
             peak_hours_count += 1
     return peak_hours_count
 
 
 def process_ad_users(user_ids, user_cpms):
+    """
+    Обработка целевых пользователей для рекламного объявления
+
+    !!! Подробная информация о предобработке находится в research/solution.ipynb
+    """
+
     users = user_ids.split(',')
     counts = []
     cpms = []
@@ -56,6 +95,12 @@ def process_ad_users(user_ids, user_cpms):
 
 
 def process_ad_publishers(publisher_ids, publisher_users):
+    """
+    Обработка целевых площадок для рекламного объявления
+
+    !!! Подробная информация о предобработке находится в research/solution.ipynb
+    """
+
     publishers = publisher_ids.split(',')
     counts = []
     for publisher in publishers:
@@ -65,17 +110,22 @@ def process_ad_publishers(publisher_ids, publisher_users):
     return sum(counts), np.mean(counts)
 
 
-def split_data(data):
-    return train_test_split(data, test_size=0.33, random_state=42)
-
-
 def process_data(data_dir):
+    """
+    Обработка данных
+
+    !!! Подробная информация о предобработке находится в research/solution.ipynb
+    """
+
+    # Читаем данные
     history = read_data(data_dir, 'history')
     ads = read_data(data_dir, 'validate')
     target = read_data(data_dir, 'validate_answers')
 
+    # Обрабатываем историю
     user_cpms, publisher_users = process_history(history)
 
+    # Обрабатываем рекламу (генерируем фичи)
     ads['publisher_size'] = ads['publishers'].apply(
         lambda publishers: len(publishers.split(','))
     )
@@ -93,15 +143,18 @@ def process_data(data_dir):
 
     ads = ads.drop(columns=['user_ids', 'publishers'])
     ads = ads.drop(columns=['hour_start', 'hour_end'])
-    
+
+    # Объединяем с таргетами
     ads = ads.merge(target, left_index=True, right_index=True)
 
-    train_data, test_data = split_data(ads)
+    # Делим данные
+    train_data, test_data = train_test_split(ads, test_size=0.33, random_state=42)
 
+    # Сохраняем в соответствующие файлы
     write_data(data_dir, 'preprocessed_data_train', train_data)
     write_data(data_dir, 'preprocessed_data_test', test_data)
 
 
 if __name__ == '__main__':
-    data_dir = sys.argv[1]
-    process_data(data_dir)
+    data_dir_path = sys.argv[1]
+    process_data(data_dir_path)

@@ -6,16 +6,17 @@ from sklearn.ensemble import GradientBoostingRegressor
 
 
 class VKAdsRegressor(BaseEstimator, RegressorMixin):
+    """
+    Модель регрессии для рекламных объявлений
+
+    !!! Подробная информация о модели находится в research/solution.ipynb
+    """
+
     def __init__(self, train_independently: bool = False):
         self.train_independently = train_independently
         self.model1 = CatBoostRegressor(silent=True)
         self.model2 = GradientBoostingRegressor()
         self.model3 = GradientBoostingRegressor()
-
-    def _wrap_to_df(self, name, data):
-        df = pd.DataFrame()
-        df[name] = data
-        return df
 
     def fit(self, X, y):
         self.model1.fit(X, y['at_least_one'])

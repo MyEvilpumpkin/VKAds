@@ -6,9 +6,9 @@ from testing import test_model
 
 
 if __name__ == '__main__':
-    data_dir = sys.argv[1]
-    model_dir = sys.argv[2]
+    data_dir_path = sys.argv[1]
+    model_dir_path = sys.argv[2]
 
-    process_data(data_dir)
-    train_model(data_dir, model_dir)
-    test_model(data_dir, model_dir)
+    process_data(data_dir_path)
+    train_model(data_dir_path, model_dir_path)
+    test_model(data_dir_path, model_dir_path)
