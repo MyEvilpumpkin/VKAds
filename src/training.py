@@ -23,7 +23,7 @@ def train_model(data_dir, model_dir):
     data = read_data(data_dir, 'preprocessed_data_train')
     features, targets = features_targets_split(data)
 
-    model = VKAdsRegressor()
+    model = VKAdsRegressor(train_independently=True)
     model.fit(features, targets)
 
     save_model(model_dir, model)

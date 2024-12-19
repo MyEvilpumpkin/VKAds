@@ -35,6 +35,33 @@ def features_targets_split(data):
     return features, targets
 
 
+def handle_outliers(df, method='replace'):
+    """
+    Обработка выбросов
+    """
+
+    df_clean = df.copy()
+    numeric_columns = df_clean.select_dtypes(include=['number']).columns
+
+    for col in numeric_columns:
+        Q1 = df_clean[col].quantile(0.25)
+        Q3 = df_clean[col].quantile(0.75)
+        IQR = Q3 - Q1
+
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        if method == 'remove':
+            df_clean = df_clean[(df_clean[col] >= lower_bound) & (df_clean[col] <= upper_bound)]
+        elif method == 'replace':
+            df_clean[col] = df_clean[col].apply(
+                lambda x: lower_bound if x < lower_bound else (upper_bound if x > upper_bound else x))
+        else:
+            raise ValueError('method должен быть "remove" или "replace"')
+
+    return df_clean
+
+
 def process_history(history):
     """
     Обработка таблицы с историей
@@ -61,21 +88,6 @@ def process_history(history):
     return user_cpms, publisher_users
 
 
-def peak_hours(hour_start, hour_end):
-    """
-    Вычисление пиковых часов
-
-    !!! Подробная информация о предобработке находится в research/solution.ipynb
-    """
-
-    peak_hours_count = 0
-    for i in range(hour_start, hour_end + 1):
-        hour_norm = i % 24
-        if 8 <= hour_norm <= 22:
-            peak_hours_count += 1
-    return peak_hours_count
-
-
 def process_ad_users(user_ids, user_cpms):
     """
     Обработка целевых пользователей для рекламного объявления
@@ -89,7 +101,7 @@ def process_ad_users(user_ids, user_cpms):
     for user in users:
         if user in user_cpms:
             counts.append(len(user_cpms[user]))
-            cpms.extend(user_cpms[user])
+            cpms.append(np.mean(user_cpms[user]))
 
     return sum(counts), np.mean(counts), np.mean(cpms)
 
@@ -123,26 +135,27 @@ def process_data(data_dir):
     target = read_data(data_dir, 'validate_answers')
 
     # Обрабатываем историю
+    history = history[history['cpm'] < history['cpm'].quantile(0.95)]
+    history = history[history['cpm'] > history['cpm'].quantile(0.05)]
+    history['cpm'] = np.log1p(history['cpm'])
+
     user_cpms, publisher_users = process_history(history)
 
     # Обрабатываем рекламу (генерируем фичи)
-    ads['publisher_size'] = ads['publishers'].apply(
-        lambda publishers: len(publishers.split(','))
-    )
-    ads['peak_hours'] = ads.apply(
-        lambda row: peak_hours(row['hour_start'], row['hour_end']), axis=1
-    )
-    ads['cpm_x_peak_hours'] = ads['cpm'] * ads['peak_hours']
-    ads['publisher_size_x_peak_hours'] = ads['publisher_size'] * ads['peak_hours']
+    ads['cpm'] = np.log1p(ads['cpm'])
     ads[['users_power', 'mean_users_power', 'mean_cpm_per_users']] = ads['user_ids'].apply(
         lambda user_ids: process_ad_users(user_ids, user_cpms)
     ).apply(pd.Series)
-    ads[['active_users_in_publishers', 'mean_active_users_in_publishers']] = ads['publishers'].apply(
+    ads[['users_in_publishers', 'mean_users_in_publishers']] = ads['publishers'].apply(
         lambda publisher_ids: process_ad_publishers(publisher_ids, publisher_users)
     ).apply(pd.Series)
+    ads['users_power'] = ads['users_power'].apply(lambda x: min(x, ads['users_power'].quantile(0.95)))
+    ads[['mean_users_power', 'mean_cpm_per_users']] = handle_outliers(ads[['mean_users_power', 'mean_cpm_per_users']])
+    ads['hours'] = ads.apply(lambda row: row['hour_end'] - row['hour_start'], axis=1)
+    ads['users_x_cpm_x_hours_x_power'] = ads['users_in_publishers'] * ads['cpm'] * ads['hours'] * ads['mean_users_power']
 
     ads = ads.drop(columns=['user_ids', 'publishers'])
-    ads = ads.drop(columns=['hour_start', 'hour_end'])
+    ads = ads.drop(columns=['hour_start', 'hour_end', 'hours'])
 
     # Объединяем с таргетами
     ads = ads.merge(target, left_index=True, right_index=True)
